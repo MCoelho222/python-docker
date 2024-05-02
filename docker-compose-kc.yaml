@@ -1,0 +1,47 @@
+version: "3"
+services:
+  postgres:
+    image: postgres
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=mcoelho222
+    networks:
+      - keycloak-network
+    container_name: keycloakdev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  keycloak:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: custom-kc-image:latest
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_HTTP_RELATIVE_PATH=/keycloak
+      - KC_HOSTNAME_PORT=8445
+      # - KEYCLOAK_IMPORT=/opt/jboss/keycloak/standalone/data/import/realm-export.json
+    volumes:
+      - keycloak_data:/opt/jboss/keycloak/standalone/data
+      - ./kc-theme-furnas/:/opt/keycloak/themes/furnas/
+    networks:
+      - keycloak-network
+      - kong-net
+    depends_on:
+      - postgres
+    entrypoint: "/opt/keycloak/bin/ad.sh start-dev --spi-theme-static-max-age=-1 --spi-theme-cache-themes=false --spi-theme-cache-templates=false"
+
+networks:
+  keycloak-network:
+    driver: bridge
+  kong-net:
+    external:
+      name: kong-net
+
+volumes:
+  postgres_data:
+  keycloak_data:

@@ -1,0 +1,47 @@
+version: '3'
+services:
+  postgis:
+    image: "postgis/postgis:15-3.3"
+    environment:
+      POSTGRES_USER: postgis
+      POSTGRES_PASSWORD: postgis
+      POSTGRES_DB: furnas
+    ports:
+      - "5433:5432"
+    networks:
+      - postgis_geoserver_network
+      - kong-net
+  geoserver:
+    image: "docker.osgeo.org/geoserver:2.23.x"
+    depends_on:
+      - postgis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/geoserver"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    environment:
+      CORS_ENABLED: true
+    networks:
+      - postgis_geoserver_network
+      - kong-net
+
+  setup:
+    image: curlimages/curl:8.2.1
+    depends_on:
+      geoserver:
+        condition: service_healthy
+    command: [ "sh",
+               "-c",
+               "curl -v -u admin:geoserver -XPOST -H 'Content-Type: application/xml' -d '<workspace><name>furnas</name></workspace>' http://geoserver:8080/geoserver/rest/workspaces && curl -v -u admin:geoserver -XPOST -H 'Content-type: text/xml' -d '<dataStore><name>furnas-datasource</name><connectionParameters><host>postgis</host><port>5432</port><database>furnas</database><schema>public</schema><user>postgis</user><passwd>postgis</passwd><dbtype>postgis</dbtype></connectionParameters></dataStore>' http://geoserver:8080/geoserver/rest/workspaces/furnas/datastores && echo 'Sleeping for 10 seconds' && sleep 10 && curl -v -u admin:geoserver -XPOST -H 'Content-type: text/xml' -d '<featureType><name>furnas-gap</name><nativeName>gap</nativeName><title>gap</title><srs>EPSG:404000</srs><enabled>true</enabled></featureType>' http://geoserver:8080/geoserver/rest/workspaces/furnas/datastores/furnas-datasource/featuretypes && curl -v -u admin:geoserver -XPOST -H 'Content-type: text/xml' -d '<featureType><name>furnas-tower</name><nativeName>tower</nativeName><title>tower</title><srs>EPSG:404000</srs><enabled>true</enabled></featureType>' http://geoserver:8080/geoserver/rest/workspaces/furnas/datastores/furnas-datasource/featuretypes"
+    ]
+    networks:
+      - postgis_geoserver_network
+      - kong-net
+
+networks:
+  postgis_geoserver_network:
+    driver: bridge
+  kong-net:
+    external:
+      name: kong-net
